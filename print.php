@@ -7,24 +7,27 @@ $conn = new mysqli(
     $config['db']['name']
 );
 
-$result = $conn->query("SELECT * FROM barcode_print WHERE print_count > 0");
-
-if ($result->num_rows == 0) {
-    die("No barcodes scheduled.");
+if (empty($_POST['ids'])) {
+    die("No barcode selected.");
 }
 
-$labelWidth = 406;   // 2 inch
-$middle = 203;       // exact center of 2 inch
+$ids = $_POST['ids'];
 
 $tspl = "";
 $tspl .= "SIZE 4,1.5\n";
-$tspl .= "GAP 2 mm, 0\n";
+$tspl .= "GAP 2 mm,0 mm\n";
 $tspl .= "DIRECTION 1\n";
 
 $labels = [];
 
-while($row = $result->fetch_assoc()) {
-    for ($i = 0; $i < $row['print_count']; $i++) {
+foreach ($ids as $id) {
+
+    $stmt = $conn->prepare("SELECT * FROM barcode_print WHERE barcode_id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($row = $result->fetch_assoc()) {
         $labels[] = $row;
     }
 }
@@ -35,7 +38,7 @@ for ($i = 0; $i < $total; $i += 2) {
 
     $tspl .= "CLS\n";
 
-    // ================= LEFT LABEL =================
+    // LEFT LABEL
     if (isset($labels[$i])) {
 
         $row = $labels[$i];
@@ -44,18 +47,21 @@ for ($i = 0; $i < $total; $i += 2) {
         $product = strtoupper($row['product']);
         $barcode = $row['barcode_no'];
 
-        // $tspl .= "TEXT $middle,20,\"3\",0,1,1,\"$company\"\n";
-        // $tspl .= "TEXT $middle,48,\"4\",0,1,1,\"$product\"\n";
-
-        // $tspl .= "BARCODE 63,85,\"128\",80,1,0,2,2,\"$barcode\"\n";
-
         $tspl .= "TEXT 20,55,\"2\",0,1,1,\"$company\"\n";
         $tspl .= "TEXT 20,80,\"2\",0,1,1,\"Product: $product\"\n";
-
         $tspl .= "BARCODE 20,115,\"128\",80,1,0,2,2,\"$barcode\"\n";
+
+        // increment lifetime counter
+        $update = $conn->prepare(
+            "UPDATE barcode_print 
+             SET print_count = print_count + 1 
+             WHERE barcode_id=?"
+        );
+        $update->bind_param("i", $row['barcode_id']);
+        $update->execute();
     }
 
-    // ================= RIGHT LABEL =================
+    // RIGHT LABEL
     if (isset($labels[$i+1])) {
 
         $row = $labels[$i+1];
@@ -66,14 +72,18 @@ for ($i = 0; $i < $total; $i += 2) {
 
         $offset = 405;
 
-        // $tspl .= "TEXT " . ($middle + $offset) . ",18,\"4\",0,1,1,\"$company\"\n";
-        // $tspl .= "TEXT " . ($middle + $offset) . ",48,\"4\",0,1,1,\"$product\"\n";
+        $tspl .= "TEXT " . (20 + $offset) . ",55,\"2\",0,1,1,\"$company\"\n";
+        $tspl .= "TEXT " . (20 + $offset) . ",80,\"2\",0,1,1,\"Product: $product\"\n";
+        $tspl .= "BARCODE " . (20 + $offset) . ",115,\"128\",80,1,0,2,2,\"$barcode\"\n";
 
-        // $tspl .= "BARCODE " . (63 + $offset) . ",85,\"128\",80,1,0,2,2,\"$barcode\"\n";
-
-        $tspl .= "TEXT " . (20 + $offset) . ",60,\"2\",0,1,1,\"$company\"\n";
-        $tspl .= "TEXT " . (20 + $offset) . ",90,\"2\",0,1,1,\"Product: $product\"\n";
-        $tspl .= "BARCODE " . (20 + $offset) . ",125,\"128\",80,1,0,2,2,\"$barcode\"\n";
+        // increment lifetime counter
+        $update = $conn->prepare(
+            "UPDATE barcode_print 
+             SET print_count = print_count + 1 
+             WHERE barcode_id=?"
+        );
+        $update->bind_param("i", $row['barcode_id']);
+        $update->execute();
     }
 
     $tspl .= "PRINT 1\n";
@@ -85,37 +95,5 @@ file_put_contents("label.txt", $tspl);
 $printer = $config['printer']['name'];
 exec("copy /b label.txt \"\\\\localhost\\$printer\"");
 
-// Track how many times each barcode printed in this job
-$printSummary = [];
-
-while($row = $result->fetch_assoc()) {
-
-    $barcodeNo = $row['barcode_no'];
-    $qty = $row['print_count'];
-
-    // Store quantity for updating total
-    if (!isset($printSummary[$barcodeNo])) {
-        $printSummary[$barcodeNo] = 0;
-    }
-
-    $printSummary[$barcodeNo] += $qty;
-
-    for ($i = 0; $i < $qty; $i++) {
-        $labels[] = $row;
-    }
-}
-
-foreach ($printSummary as $barcodeNo => $qtyPrinted) {
-
-    $stmt = $conn->prepare(
-        "UPDATE barcode_print 
-         SET print_count = print_count + ? 
-         WHERE barcode_no = ?"
-    );
-
-    $stmt->bind_param("is", $qtyPrinted, $barcodeNo);
-    $stmt->execute();
-}
-
-
-echo "Printing completed.";
+header("Location: print_ui.php");
+exit();
