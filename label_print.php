@@ -60,17 +60,17 @@ if (empty($ids)) {
     die("No barcodes selected.");
 }
 
-/* -------------------------------------------------------
-   CONNECT TO PRINTER
---------------------------------------------------------*/
+// /* -------------------------------------------------------
+//    CONNECT TO PRINTER
+// --------------------------------------------------------*/
 
-$systemName = gethostname();
-$printerPath = "\\\\$systemName\\TSC TTP-244 Pro";
-$printer = fopen($printerPath, "w");
+// $systemName = gethostname();
+// $printerPath = "\\\\$systemName\\TSC TTP-244 Pro";
+// $printer = fopen($printerPath, "w");
 
-if (!$printer) {
-    die("Printer not connected.");
-}
+// if (!$printer) {
+//     die("Printer not connected.");
+// }
 
 /* -------------------------------------------------------
    PRINT LOOP
@@ -125,6 +125,30 @@ foreach ($ids as $id) {
 
     $allTspl .= $tspl;
 
+    $data = [
+        "content" => $tspl
+    ];
+
+    $options = [
+        "http" => [
+            "header" => "Content-Type: application/json",
+            "method" => "POST",
+            "content" => json_encode($data)
+        ]
+    ];
+
+    $context = stream_context_create($options);
+
+    $response = @file_get_contents(
+        "https://print-agent.onrender.com/print",
+        false,
+        $context
+    );
+
+    if ($response === FALSE) {
+        die("Failed to send print job.");
+    }
+
     // Increment print_count by 1
     mysqli_query(
         $conn,
@@ -138,34 +162,9 @@ foreach ($ids as $id) {
    CLEANUP
 --------------------------------------------------------*/
 
-fclose($printer);
+// fclose($printer);
 
-echo "
-<html>
-<head>
-<script src='https://cdn.jsdelivr.net/npm/qz-tray@2.2.2/qz-tray.js'></script>
-</head>
-<body>
-<script>
-async function printLabel() {
-    try {
-        await qz.websocket.connect();
-        const config = qz.configs.create('TSC TTP-244 Pro');
-        const data = [{
-            type: 'raw',
-            format: 'command',
-            data: `" . addslashes($allTspl) . "`
-        }];
-        await qz.print(config, data);
-        await qz.websocket.disconnect();
-        window.location.href = 'label_print_ui';
-    } catch (err) {
-        alert('Printing failed: ' + err);
-    }
-}
-printLabel();
-</script>
-</body>
-</html>";
+header("Location: label_print_ui");
+
 exit;
 ?>

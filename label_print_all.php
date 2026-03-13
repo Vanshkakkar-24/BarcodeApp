@@ -61,7 +61,7 @@ if (!$result) {
 </div>
 
 <div style="margin-bottom:15px;">
-    <a href="label_print_ui.php" class="view-all-btn">
+    <a href="label_print_ui" class="view-all-btn">
         ← Back to Main Page
     </a>
 </div>
